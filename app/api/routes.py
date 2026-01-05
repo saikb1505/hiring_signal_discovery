@@ -20,6 +20,7 @@ from app.services.platform_url_service import PlatformURLService
 from app.api.dependencies import get_cached_openai_service
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
+from app.utils.query_formatter import build_platform_formatted_queries
 
 logger = logging.getLogger(__name__)
 
@@ -77,16 +78,44 @@ async def format_search_query(
 
     formatted_query_data, metadata = await openai_service.format_query(request.query)
 
-    # Save query to database
+    # Fetch all active platform URLs
+    platform_service = PlatformURLService(db)
+    active_platforms = await platform_service.get_all_platform_urls(
+        skip=0,
+        limit=1000,
+        include_deleted=False
+    )
+
+    # Filter only active platforms (status=1) and not deleted
+    active_platform_urls = [
+        {"url": p.url}
+        for p in active_platforms
+        if p.status == 1 and p.deleted_at is None
+    ]
+
+    # Build formatted queries for all active platforms
+    query_string = formatted_query_data.get("query_string", "")
+    locations = formatted_query_data.get("locations", [])
+    formatted_queries = build_platform_formatted_queries(
+        query_string=query_string,
+        locations=locations,
+        platform_urls=active_platform_urls
+    )
+
+    # Join all formatted queries with newlines
+    formatted_query_text = "\n".join(formatted_queries)
+
+    # Save query to database with formatted queries for all platforms
     query_service = QueryService(db)
     await query_service.create_query_history(
         original_query=request.query,
-        query_string=formatted_query_data.get("query_string", ""),
-        locations=formatted_query_data.get("locations", []),
+        query_string=query_string,
+        locations=locations,
         duration_from=formatted_query_data.get("duration", {}).get("from", ""),
-        duration_to=formatted_query_data.get("duration", {}).get("to", "")
+        duration_to=formatted_query_data.get("duration", {}).get("to", ""),
+        formatted_query=formatted_query_text
     )
-    logger.info("Query saved to database")
+    logger.info("Query saved to database with formatted queries for all active platforms")
 
     return FormattedQueryResponse(
         original_query=request.query,
