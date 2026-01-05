@@ -160,3 +160,56 @@ class PlatformURLResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class QueryHistoryResponse(BaseModel):
+    """Response schema for query history."""
+
+    id: int = Field(..., description="Query history ID")
+    original_query: str = Field(..., description="Original user query")
+    query_string: str = Field(..., description="Formatted search query string")
+    locations: List[str] = Field(default_factory=list, description="Extracted locations")
+    duration_from: Optional[str] = Field(None, description="Start date in DD/MM/YYYY format")
+    duration_to: Optional[str] = Field(None, description="End date in DD/MM/YYYY format")
+    last_run_at: str = Field(..., description="Last run timestamp")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+
+    class Config:
+        from_attributes = True
+
+
+class QueryHistoryUpdate(BaseModel):
+    """Request schema for updating a query history."""
+
+    original_query: Optional[str] = Field(
+        None,
+        min_length=1,
+        max_length=1000,
+        description="Original user query"
+    )
+    query_string: Optional[str] = Field(
+        None,
+        min_length=1,
+        description="Formatted search query string"
+    )
+    locations: Optional[List[str]] = Field(
+        None,
+        description="Extracted locations"
+    )
+    duration_from: Optional[str] = Field(
+        None,
+        description="Start date in DD/MM/YYYY format"
+    )
+    duration_to: Optional[str] = Field(
+        None,
+        description="End date in DD/MM/YYYY format"
+    )
+
+    @field_validator("original_query", "query_string")
+    @classmethod
+    def validate_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        """Validate string fields are not empty if provided."""
+        if v is not None and (not v or not v.strip()):
+            raise ValueError("Field cannot be empty or contain only whitespace")
+        return v.strip() if v else None

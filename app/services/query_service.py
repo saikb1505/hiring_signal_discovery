@@ -131,3 +131,66 @@ class QueryService:
             await self.db.refresh(query_history)
 
         return query_history
+
+    async def update_query_history(
+        self,
+        query_id: int,
+        original_query: Optional[str] = None,
+        query_string: Optional[str] = None,
+        locations: Optional[List[str]] = None,
+        duration_from: Optional[str] = None,
+        duration_to: Optional[str] = None
+    ) -> Optional[QueryHistory]:
+        """
+        Update a query history record.
+
+        Args:
+            query_id: The query history ID
+            original_query: The original user query
+            query_string: The formatted search query string
+            locations: List of extracted locations
+            duration_from: Start date in DD/MM/YYYY format
+            duration_to: End date in DD/MM/YYYY format
+
+        Returns:
+            Updated QueryHistory or None if not found
+        """
+        query_history = await self.get_query_history_by_id(query_id)
+
+        if not query_history:
+            return None
+
+        if original_query is not None:
+            query_history.original_query = original_query
+        if query_string is not None:
+            query_history.query_string = query_string
+            query_history.formatted_query = query_string
+        if locations is not None:
+            query_history.locations = locations
+        if duration_from is not None:
+            query_history.duration_from = duration_from
+        if duration_to is not None:
+            query_history.duration_to = duration_to
+
+        await self.db.flush()
+        await self.db.refresh(query_history)
+
+        return query_history
+
+    async def delete_query_history(self, query_id: int) -> Optional[QueryHistory]:
+        """
+        Delete a query history record.
+
+        Args:
+            query_id: The query history ID
+
+        Returns:
+            Deleted QueryHistory or None if not found
+        """
+        query_history = await self.get_query_history_by_id(query_id)
+
+        if query_history:
+            await self.db.delete(query_history)
+            await self.db.flush()
+
+        return query_history

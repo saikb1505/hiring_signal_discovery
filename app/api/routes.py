@@ -10,7 +10,9 @@ from app.models.schemas import (
     HealthResponse,
     PlatformURLCreate,
     PlatformURLUpdate,
-    PlatformURLResponse
+    PlatformURLResponse,
+    QueryHistoryResponse,
+    QueryHistoryUpdate
 )
 from app.services.openai_service import OpenAIService
 from app.services.query_service import QueryService
@@ -25,11 +27,11 @@ router = APIRouter()
 
 
 @router.post(
-    "/format-query",
+    "/search_query",
     response_model=FormattedQueryResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Format job search query",
-    description="Convert a natural language job search query into an optimized Google search query",
+    status_code=status.HTTP_201_CREATED,
+    summary="Create and format job search query",
+    description="Convert a natural language job search query into an optimized Google search query and save to history",
     responses={
         200: {
             "description": "Query formatted successfully",
@@ -74,7 +76,7 @@ async def format_search_query(
     logger.info(f"Received format request for query: {request.query[:100]}...")
 
     formatted_query_data, metadata = await openai_service.format_query(request.query)
-    breakpoint()
+
     # Save query to database
     query_service = QueryService(db)
     await query_service.create_query_history(
@@ -95,6 +97,96 @@ async def format_search_query(
             "to": formatted_query_data.get("duration", {}).get("to", "")
         },
         metadata=metadata
+    )
+
+
+@router.get(
+    "/search_query",
+    response_model=list[QueryHistoryResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Get all search queries",
+    description="Retrieve all search query history with pagination support"
+)
+async def get_all_search_queries(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+) -> list[QueryHistoryResponse]:
+    """
+    Get all search query history.
+
+    Args:
+        skip: Number of records to skip
+        limit: Maximum number of records to return
+        db: Database session
+
+    Returns:
+        List of query history records
+    """
+    logger.info(f"Fetching search queries (skip={skip}, limit={limit})")
+
+    query_service = QueryService(db)
+    queries = await query_service.get_all_query_history(skip=skip, limit=limit)
+
+    return [
+        QueryHistoryResponse(
+            id=q.id,
+            original_query=q.original_query,
+            query_string=q.query_string,
+            locations=q.locations or [],
+            duration_from=q.duration_from,
+            duration_to=q.duration_to,
+            last_run_at=q.last_run_at.isoformat(),
+            created_at=q.created_at.isoformat(),
+            updated_at=q.updated_at.isoformat()
+        )
+        for q in queries
+    ]
+
+
+@router.get(
+    "/search_query/{query_id}",
+    response_model=QueryHistoryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get search query by ID",
+    description="Retrieve a specific search query by its ID"
+)
+async def get_search_query(
+    query_id: int,
+    db: AsyncSession = Depends(get_db)
+) -> QueryHistoryResponse:
+    """
+    Get a search query by ID.
+
+    Args:
+        query_id: Query history ID
+        db: Database session
+
+    Returns:
+        Query history details
+    """
+    logger.info(f"Fetching search query with ID: {query_id}")
+
+    query_service = QueryService(db)
+    query = await query_service.get_query_history_by_id(query_id)
+
+    if not query:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Search query with ID {query_id} not found"
+        )
+
+    return QueryHistoryResponse(
+        id=query.id,
+        original_query=query.original_query,
+        query_string=query.query_string,
+        locations=query.locations or [],
+        duration_from=query.duration_from,
+        duration_to=query.duration_to,
+        last_run_at=query.last_run_at.isoformat(),
+        created_at=query.created_at.isoformat(),
+        updated_at=query.updated_at.isoformat()
     )
 
 
@@ -144,7 +236,11 @@ async def root(settings: Settings = Depends(get_settings)) -> dict:
         "version": settings.app_version,
         "environment": settings.environment,
         "endpoints": {
-            "/format-query": "POST - Format a natural language job search query",
+            "/search_query": "POST - Create and format a natural language job search query",
+            "/search_query": "GET - Get all search query history",
+            "/search_query/{id}": "GET - Get search query by ID",
+            "/search_query/{id}": "PUT - Update a search query",
+            "/search_query/{id}": "DELETE - Delete a search query",
             "/health": "GET - Health check endpoint",
             "/platform-urls": "GET - Get all platform URLs",
             "/platform-urls/{id}": "GET - Get platform URL by ID",
@@ -155,6 +251,111 @@ async def root(settings: Settings = Depends(get_settings)) -> dict:
             "/redoc": "GET - Alternative API documentation (ReDoc)"
         }
     }
+
+
+@router.put(
+    "/search_query/{query_id}",
+    response_model=QueryHistoryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update search query",
+    description="Update an existing search query"
+)
+async def update_search_query(
+    query_id: int,
+    request: QueryHistoryUpdate,
+    db: AsyncSession = Depends(get_db)
+) -> QueryHistoryResponse:
+    """
+    Update a search query.
+
+    Args:
+        query_id: Query history ID
+        request: Query history update request
+        db: Database session
+
+    Returns:
+        Updated query history
+    """
+    logger.info(f"Updating search query with ID: {query_id}")
+
+    query_service = QueryService(db)
+    query = await query_service.update_query_history(
+        query_id=query_id,
+        original_query=request.original_query,
+        query_string=request.query_string,
+        locations=request.locations,
+        duration_from=request.duration_from,
+        duration_to=request.duration_to
+    )
+
+    if not query:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Search query with ID {query_id} not found"
+        )
+
+    logger.info(f"Search query {query_id} updated successfully")
+
+    return QueryHistoryResponse(
+        id=query.id,
+        original_query=query.original_query,
+        query_string=query.query_string,
+        locations=query.locations or [],
+        duration_from=query.duration_from,
+        duration_to=query.duration_to,
+        last_run_at=query.last_run_at.isoformat(),
+        created_at=query.created_at.isoformat(),
+        updated_at=query.updated_at.isoformat()
+    )
+
+
+@router.delete(
+    "/search_query/{query_id}",
+    response_model=QueryHistoryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Delete search query",
+    description="Delete a search query from history"
+)
+async def delete_search_query(
+    query_id: int,
+    db: AsyncSession = Depends(get_db)
+) -> QueryHistoryResponse:
+    """
+    Delete a search query.
+
+    Args:
+        query_id: Query history ID
+        db: Database session
+
+    Returns:
+        Deleted query history
+    """
+    logger.info(f"Deleting search query with ID: {query_id}")
+
+    query_service = QueryService(db)
+    query = await query_service.delete_query_history(query_id)
+
+    if not query:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Search query with ID {query_id} not found"
+        )
+
+    logger.info(f"Search query {query_id} deleted successfully")
+
+    return QueryHistoryResponse(
+        id=query.id,
+        original_query=query.original_query,
+        query_string=query.query_string,
+        locations=query.locations or [],
+        duration_from=query.duration_from,
+        duration_to=query.duration_to,
+        last_run_at=query.last_run_at.isoformat(),
+        created_at=query.created_at.isoformat(),
+        updated_at=query.updated_at.isoformat()
+    )
 
 
 @router.post(
