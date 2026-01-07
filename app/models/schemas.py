@@ -171,6 +171,7 @@ class QueryHistoryResponse(BaseModel):
     locations: List[str] = Field(default_factory=list, description="Extracted locations")
     duration_from: Optional[str] = Field(None, description="Start date in DD/MM/YYYY format")
     duration_to: Optional[str] = Field(None, description="End date in DD/MM/YYYY format")
+    formatted_query: Optional[str] = Field(None, description="Complete formatted query for platform")
     last_run_at: str = Field(..., description="Last run timestamp")
     created_at: str = Field(..., description="Creation timestamp")
     updated_at: str = Field(..., description="Last update timestamp")

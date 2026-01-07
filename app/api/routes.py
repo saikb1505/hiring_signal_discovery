@@ -102,20 +102,18 @@ async def format_search_query(
         platform_urls=active_platform_urls
     )
 
-    # Join all formatted queries with newlines
-    formatted_query_text = "\n".join(formatted_queries)
-
-    # Save query to database with formatted queries for all platforms
+    # Create a separate query history record for each platform
     query_service = QueryService(db)
-    await query_service.create_query_history(
-        original_query=request.query,
-        query_string=query_string,
-        locations=locations,
-        duration_from=formatted_query_data.get("duration", {}).get("from", ""),
-        duration_to=formatted_query_data.get("duration", {}).get("to", ""),
-        formatted_query=formatted_query_text
-    )
-    logger.info("Query saved to database with formatted queries for all active platforms")
+    for formatted_query in formatted_queries:
+        await query_service.create_query_history(
+            original_query=request.query,
+            query_string=query_string,
+            locations=locations,
+            duration_from=formatted_query_data.get("duration", {}).get("from", ""),
+            duration_to=formatted_query_data.get("duration", {}).get("to", ""),
+            formatted_query=formatted_query
+        )
+    logger.info(f"Created {len(formatted_queries)} query history records, one for each active platform")
 
     return FormattedQueryResponse(
         original_query=request.query,
@@ -165,6 +163,7 @@ async def get_all_search_queries(
             locations=q.locations or [],
             duration_from=q.duration_from,
             duration_to=q.duration_to,
+            formatted_query=q.formatted_query,
             last_run_at=q.last_run_at.isoformat(),
             created_at=q.created_at.isoformat(),
             updated_at=q.updated_at.isoformat()
@@ -213,6 +212,7 @@ async def get_search_query(
         locations=query.locations or [],
         duration_from=query.duration_from,
         duration_to=query.duration_to,
+        formatted_query=query.formatted_query,
         last_run_at=query.last_run_at.isoformat(),
         created_at=query.created_at.isoformat(),
         updated_at=query.updated_at.isoformat()
@@ -333,6 +333,7 @@ async def update_search_query(
         locations=query.locations or [],
         duration_from=query.duration_from,
         duration_to=query.duration_to,
+        formatted_query=query.formatted_query,
         last_run_at=query.last_run_at.isoformat(),
         created_at=query.created_at.isoformat(),
         updated_at=query.updated_at.isoformat()
@@ -381,6 +382,7 @@ async def delete_search_query(
         locations=query.locations or [],
         duration_from=query.duration_from,
         duration_to=query.duration_to,
+        formatted_query=query.formatted_query,
         last_run_at=query.last_run_at.isoformat(),
         created_at=query.created_at.isoformat(),
         updated_at=query.updated_at.isoformat()
