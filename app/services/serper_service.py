@@ -100,7 +100,7 @@ class SerperService:
                     "knowledge_graph": data.get("knowledgeGraph"),
                     "answer_box": data.get("answerBox")
                 }
-
+                
                 logger.info(
                     f"Search completed successfully. Found {len(organic_results)} results"
                 )

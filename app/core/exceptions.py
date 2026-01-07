@@ -43,3 +43,10 @@ class SerperServiceError(AppException):
 
     def __init__(self, message: str = "SerperAPI service error"):
         super().__init__(message, status_code=502)
+
+
+class SerpAPIServiceError(AppException):
+    """Exception raised when SerpAPI calls fail."""
+
+    def __init__(self, message: str = "SerpAPI service error"):
+        super().__init__(message, status_code=502)

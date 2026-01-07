@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     serper_timeout: int = 30
     serper_max_results: int = 10
 
+    # SerpAPI settings
+    serpapi_api_key: str
+    serpapi_timeout: int = 30
+    serpapi_max_results: int = 1
+
     # CORS settings
     cors_origins: list[str] = ["*"]
     cors_allow_credentials: bool = True

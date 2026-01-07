@@ -17,10 +17,13 @@ from app.models.schemas import (
 from app.services.openai_service import OpenAIService
 from app.services.query_service import QueryService
 from app.services.platform_url_service import PlatformURLService
+from app.services.serper_service import SerperService
+from app.services.serpapi_service import SerpAPIService
+from app.services.search_result_service import SearchResultService
 from app.api.dependencies import get_cached_openai_service
 from app.core.config import Settings, get_settings
 from app.core.database import get_db
-from app.utils.query_formatter import build_platform_formatted_queries
+from app.utils.query_formatter import build_platform_formatted_queries_with_ids
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +65,8 @@ router = APIRouter()
 async def format_search_query(
     request: SearchQueryRequest,
     openai_service: OpenAIService = Depends(get_cached_openai_service),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings)
 ) -> FormattedQueryResponse:
     """
     Format a natural language job search query.
@@ -87,33 +91,67 @@ async def format_search_query(
     )
 
     # Filter only active platforms (status=1) and not deleted
-    active_platform_urls = [
-        {"url": p.url}
+    active_platform_data = [
+        {"id": p.id, "url": p.url}
         for p in active_platforms
         if p.status == 1 and p.deleted_at is None
     ]
 
-    # Build formatted queries for all active platforms
+    # Build formatted queries for all active platforms with IDs
     query_string = formatted_query_data.get("query_string", "")
     locations = formatted_query_data.get("locations", [])
-    formatted_queries = build_platform_formatted_queries(
+    formatted_queries_with_ids = build_platform_formatted_queries_with_ids(
         query_string=query_string,
         locations=locations,
-        platform_urls=active_platform_urls
+        platform_data=active_platform_data
     )
 
     # Create a separate query history record for each platform
     query_service = QueryService(db)
-    for formatted_query in formatted_queries:
-        await query_service.create_query_history(
-            original_query=request.query,
-            query_string=query_string,
-            locations=locations,
-            duration_from=formatted_query_data.get("duration", {}).get("from", ""),
-            duration_to=formatted_query_data.get("duration", {}).get("to", ""),
-            formatted_query=formatted_query
-        )
-    logger.info(f"Created {len(formatted_queries)} query history records, one for each active platform")
+    search_result_service = SearchResultService(db)
+
+    # Perform searches using SerpAPI service
+    serpapi_service = SerpAPIService(settings)
+
+    search_results = []
+    for formatted_query, platform_id, platform_url in formatted_queries_with_ids:
+        try:
+            # Create query history record
+            query_history = await query_service.create_query_history(
+                original_query=request.query,
+                query_string=query_string,
+                locations=locations,
+                duration_from=formatted_query_data.get("duration", {}).get("from", ""),
+                duration_to=formatted_query_data.get("duration", {}).get("to", ""),
+                formatted_query=formatted_query
+            )
+            logger.info(f"Created query history record with ID: {query_history.id} for platform: {platform_url}")
+
+            # Perform search
+            result = await serpapi_service.search(formatted_query)
+            search_results.append(result)
+            logger.info(f"Search completed for query: {formatted_query[:100]}...")
+
+            # Save search results to database
+            if result.get("results"):
+                search_id = result.get("search_metadata", {}).get("search_id")
+                await search_result_service.create_search_results_bulk(
+                    query_history_id=query_history.id,
+                    platform_id=platform_id,
+                    search_id=search_id,
+                    results=result["results"]
+                )
+                logger.info(f"Saved {len(result['results'])} search results for query history ID: {query_history.id}")
+
+            # Commit the transaction for this query
+            await db.commit()
+
+        except Exception as e:
+            logger.error(f"Search failed for query: {formatted_query[:100]}... Error: {str(e)}")
+            # Rollback this specific transaction
+            await db.rollback()
+            # Continue with other searches even if one fails
+            continue
 
     return FormattedQueryResponse(
         original_query=request.query,

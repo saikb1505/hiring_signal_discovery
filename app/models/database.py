@@ -1,8 +1,9 @@
 """Database models using SQLAlchemy ORM."""
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -53,3 +54,42 @@ class PlatformURL(Base):
 
     def __repr__(self):
         return f"<PlatformURL(id={self.id}, platform='{self.platform}', status={self.status})>"
+
+
+class SearchResult(Base):
+    """Model for storing search results."""
+
+    __tablename__ = "search_results"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    query_history_id = Column(Integer, ForeignKey("query_history.id"), nullable=False, index=True)
+    platform_id = Column(Integer, ForeignKey("platform_urls.id"), nullable=True, index=True)
+    search_id = Column(String(255), nullable=True, index=True)  # External search ID from search API
+
+    # Result details
+    position = Column(Integer, nullable=True)
+    title = Column(Text, nullable=False)
+    link = Column(String(2048), nullable=False)
+    snippet = Column(Text, nullable=True)
+    source = Column(String(255), nullable=True)
+
+    # Additional metadata from search API
+    redirect_link = Column(String(2048), nullable=True)
+    displayed_link = Column(String(2048), nullable=True)
+    favicon = Column(String(2048), nullable=True)
+    snippet_highlighted_words = Column(JSON, nullable=True, default=list)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    # Relationships
+    query_history = relationship("QueryHistory", backref="search_results")
+    platform = relationship("PlatformURL", backref="search_results")
+
+    def __repr__(self):
+        return f"<SearchResult(id={self.id}, query_history_id={self.query_history_id}, title='{self.title[:50]}...')>"

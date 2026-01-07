@@ -214,3 +214,49 @@ class QueryHistoryUpdate(BaseModel):
         if v is not None and (not v or not v.strip()):
             raise ValueError("Field cannot be empty or contain only whitespace")
         return v.strip() if v else None
+
+
+class SearchResultCreate(BaseModel):
+    """Request schema for creating a search result."""
+
+    query_history_id: int = Field(..., description="Query history ID")
+    platform_id: Optional[int] = Field(None, description="Platform ID")
+    search_id: Optional[str] = Field(None, description="External search ID")
+    position: Optional[int] = Field(None, description="Position in search results")
+    title: str = Field(..., min_length=1, description="Result title")
+    link: str = Field(..., min_length=1, description="Result URL")
+    snippet: Optional[str] = Field(None, description="Result snippet")
+    source: Optional[str] = Field(None, description="Result source")
+    redirect_link: Optional[str] = Field(None, description="Redirect URL")
+    displayed_link: Optional[str] = Field(None, description="Displayed URL")
+    favicon: Optional[str] = Field(None, description="Favicon URL")
+    snippet_highlighted_words: Optional[List[str]] = Field(
+        default_factory=list,
+        description="Highlighted words in snippet"
+    )
+
+
+class SearchResultResponse(BaseModel):
+    """Response schema for search result."""
+
+    id: int = Field(..., description="Search result ID")
+    query_history_id: int = Field(..., description="Query history ID")
+    platform_id: Optional[int] = Field(None, description="Platform ID")
+    search_id: Optional[str] = Field(None, description="External search ID")
+    position: Optional[int] = Field(None, description="Position in search results")
+    title: str = Field(..., description="Result title")
+    link: str = Field(..., description="Result URL")
+    snippet: Optional[str] = Field(None, description="Result snippet")
+    source: Optional[str] = Field(None, description="Result source")
+    redirect_link: Optional[str] = Field(None, description="Redirect URL")
+    displayed_link: Optional[str] = Field(None, description="Displayed URL")
+    favicon: Optional[str] = Field(None, description="Favicon URL")
+    snippet_highlighted_words: Optional[List[str]] = Field(
+        default_factory=list,
+        description="Highlighted words in snippet"
+    )
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+
+    class Config:
+        from_attributes = True
